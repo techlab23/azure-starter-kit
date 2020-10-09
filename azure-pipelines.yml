@@ -1,0 +1,120 @@
+# Node.js Function App to Linux on Azure
+# Build a Node.js function app and deploy it to Azure as a Linux function app.
+# Add steps that analyze code, save build artifacts, deploy, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/javascript
+
+trigger:
+- master
+
+variables:
+
+  # Azure Resource Manager connection created during pipeline creation
+  azureSubscription: '2a05444f-fda5-4d00-88c1-3b4ecffd4178'
+
+  # Function app dev
+  functionAppName: 'azure-starter-functions'
+ 
+  # Environment dev
+  environmentName: 'azure-starter-functions'
+ 
+  # Agent VM image name
+  vmImageName: 'ubuntu-latest'
+
+stages:
+- stage: Build
+  displayName: Build stage
+  jobs:  
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: $(vmImageName)
+      
+    steps:
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '10.x'
+      displayName: 'Install Node.js'
+
+    - script: |
+        cd functions
+        npm install
+        npm run build --if-present
+        npm run test --if-present
+      displayName: 'Build azure functions'
+    
+    - script: |
+        cd website
+        npm install
+        npm run build --if-present
+        npm run test --if-present
+      displayName: 'Build static site'
+      
+    - task: ArchiveFiles@2
+      displayName: 'Archive function files'
+      inputs:
+        rootFolderOrFile: 'functions'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId)-functions.zip
+        replaceExistingArchive: true
+        verbose: true
+  
+    - task: ArchiveFiles@2
+      displayName: 'Archive website files'
+      inputs:
+        rootFolderOrFile: 'website/dist'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId)-web.zip'
+        replaceExistingArchive: true
+        verbose: true
+    
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish archive'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
+    
+- stage: Deploy
+  displayName: Deploy stage
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - deployment: Deploy
+    displayName: Deploy
+    environment: $(environmentName)
+    pool: 
+      vmImage: $(vmImageName)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadBuildArtifacts@0
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'drop'
+              downloadPath: '$(System.ArtifactsDirectory)'
+          - task: AzureFunctionApp@1
+            displayName: 'Azure Functions App Deploy: azure-starter-functions'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              appType: functionAppLinux
+              appName: $(functionAppName)
+              package: '$(Build.ArtifactStagingDirectory)/drop/$(Build.BuildId)-functions.zip'
+          - task: ExtractFiles@1
+            inputs:
+              archiveFilePatterns: '$(Build.ArtifactStagingDirectory)/drop/$(Build.BuildId)-web.zip'
+              destinationFolder: '$(Build.ArtifactStagingDirectory)/drop/dist'
+              cleanDestinationFolder: true
+              overwriteExistingFiles: false
+          - task: AzureCLI@2
+            displayName: 'Azure CLI Deploy: azure-static-site'
+            inputs:
+              azureSubscription: 'Pay-As-You-Go (a95ff90c-9450-4f17-ac8f-f30c08a0666f)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: 'az storage blob upload-batch -s $4 -d $1 --account-name $2 --account-key $3' 
+              arguments: '$(STATIC_SITE_TARGET) $(ACCOUNT_NAME) $(AZURE_STORAGE_ACCESS_KEY) $(Build.ArtifactStagingDirectory)/drop/dist'
+              addSpnToEnvironment: true
