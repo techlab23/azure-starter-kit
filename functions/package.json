@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "version": "",
+  "name": "azure-starter-kit-functions",
+  "version": "0.0.1",
   "scripts": {
     "build": "tsc",
     "build:production": "npm run prestart && npm prune --production",
@@ -8,8 +8,7 @@
     "prestart": "npm run build && func extensions install",
     "start:host": "func start",
     "start": "npm-run-all --parallel start:host watch",
-    "test": "echo \"No tests yet...\"",
-    "cli-deploy": ""
+    "test": "echo \"No tests yet...\""
   },
   "description": "",
   "devDependencies": {

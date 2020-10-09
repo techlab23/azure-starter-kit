@@ -112,7 +112,7 @@ stages:
           - task: AzureCLI@2
             displayName: 'Azure CLI Deploy: azure-static-site'
             inputs:
-              azureSubscription: 'Pay-As-You-Go (a95ff90c-9450-4f17-ac8f-f30c08a0666f)'
+              azureSubscription: '$(azureSubscription)'
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: 'az storage blob upload-batch -s $4 -d $1 --account-name $2 --account-key $3' 
